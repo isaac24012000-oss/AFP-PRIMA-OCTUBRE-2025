@@ -11,55 +11,37 @@ body, .main, [data-testid="stAppViewContainer"], [data-testid="stAppViewBlockCon
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 # Ruta del archivo Excel (usar ruta relativa para Streamlit Cloud)
-EXCEL_PATH = "C:\\Users\\USUARIO\\Desktop\\AFP PRIMA\\AFP-PRIMA-OCTUBRE\\DATA TOTAL WORLDTEL 2025.xlsx"
+EXCEL_PATH = "DATA TOTAL WORLDTEL 2025.xlsx"  # Ruta relativa para Streamlit Cloud
 
-# Leer el archivo Excel y asignar nombres a las columnas
-column_names = [
-    "CAMPAÑA", "IDOBLIG", "DOCUMENTO", "DNI/RUC", "RAZON SOCIAL", "CONTACTABILIDAD",
-    "ULTIMA FECHA GESTION", "DEUDA TOTAL", "GASTOS ADMIN", "SEGMENTO DEUDA", "FECHA DE PAGO P", "REC. PLANILLAS",
-    "FECHA DE PAGO G", "REC. GASTOS", "PRIORIDAD", "TIPO DE PAGO", "HISTORICO", "PERIODOS ASIGNADOS",
-    "PERIODOS PAGADOS", "PERIODOS PENDIENTES", "Tiene TLF", "PRODUCTO", "OPERADOR", "ASESOR", "Telefono1",
-    "Telefono2", "Telefono3", "Monto Promesa", "UNICO", "Tiene llamada", "#LLAMADAS", "Tiene Pago PLANILLA",
-    "Tiene Pago GASTOS", "#PDP"
-]
-
-data = pd.read_excel(EXCEL_PATH, header=None)  # Asegúrate de usar la ruta correcta
-data.columns = column_names
-
-# Asegurarse de que las columnas monetarias sean numéricas
-columns_to_convert = ['DEUDA TOTAL', 'GASTOS ADMIN', 'REC. PLANILLAS', 'REC. GASTOS']
-for column in columns_to_convert:
-    data[column] = pd.to_numeric(data[column], errors='coerce')
-
-# Mostrar las primeras filas para verificar
-print(data.head())
-
-# Verificar los nombres reales de las columnas en el DataFrame
-st.write("Columnas disponibles en el DataFrame:")
-st.write(data.columns.tolist())
-
-# Imprimir las columnas disponibles para verificar
-print("Columnas disponibles en el archivo:")
-print(data.columns)
+# Verificar si el archivo Excel existe y se puede cargar
+if not os.path.exists(EXCEL_PATH):
+    st.error(f"El archivo Excel no se encuentra en la ruta especificada: {EXCEL_PATH}")
+else:
+    try:
+        df = pd.read_excel(EXCEL_PATH)
+    except Exception as e:
+        st.error(f"Error al cargar el archivo Excel: {e}")
 
 # Cargar datos
 
 def load_data():
     df = pd.read_excel(EXCEL_PATH)
-    # Verificar que la columna 'RAZON SOCIAL' esté presente
+    # Verificar que la columna 'razon_social' esté presente
     if 'RAZON SOCIAL' not in df.columns:
         st.error("La columna 'RAZON SOCIAL' no está presente en el archivo Excel.")
     return df
 
 df = load_data()
 
-# Corregir el nombre de la columna en el código
-# Reemplazar 'razon_social' por 'RAZON SOCIAL'
+# Ocultar mensajes de verificación del archivo Excel y columnas disponibles
+# st.write("Columnas disponibles en el DataFrame:", df.columns.tolist())
+# st.success("Archivo Excel cargado correctamente.")
 
-# Ejemplo de ajuste:
-razon_social = df['RAZON SOCIAL']
+# Ajustar el nombre de la columna 'RAZON SOCIAL' al cargar los datos desde el archivo Excel
+df['razon_social'] = df['RAZON SOCIAL'] if 'RAZON SOCIAL' in df.columns else ''
 
 # Definir la función render_historial_pagos al inicio del archivo
 
@@ -195,19 +177,23 @@ def render_historial_pagos(df_pagos):
                     title='Comparación de Pagos: Planillas vs Gastos (por día)'
                 )
 
-                st.altair_chart(chart, width='stretch')
+                st.altair_chart(chart, use_container_width=True)
 
     # Mostrar detalle de pagos recientes
-    st.markdown("### 📋 Detalle de Pagos Recientes")
-    if not df_pagos_filtrado.empty:
-        df_pagos_filtrado = df_pagos_filtrado.copy()
-        if 'fecha' in df_pagos_filtrado.columns:
-            df_pagos_filtrado['fecha'] = df_pagos_filtrado['fecha'].dt.strftime('%Y-%m-%d')
-        if 'monto' in df_pagos_filtrado.columns:
-            df_pagos_filtrado['monto'] = df_pagos_filtrado['monto'].apply(lambda x: f"S/. {x:,.2f}")
-        if 'RAZON SOCIAL' in df_pagos_filtrado.columns:
-            df_pagos_filtrado['RAZON SOCIAL'] = df_pagos_filtrado['RAZON SOCIAL']
-        st.dataframe(df_pagos_filtrado[['fecha', 'monto', 'campana', 'tipo_pago', 'RAZON SOCIAL']].head(20), width='stretch')
+    if not df_pagos.empty:
+        df_pagos['razon_social'] = df_pagos['razon_social'].fillna('Desconocido').astype(str).str.strip()
+        # Cambiar los nombres de las columnas en la tabla 'Detalle de Pagos Recientes'
+        st.markdown("### 📋 Detalle de Pagos Recientes")
+        st.dataframe(df_pagos[['fecha', 'tipo_pago', 'campana', 'razon_social', 'monto']].rename(columns={
+            'fecha': 'FECHA',
+            'tipo_pago': 'TIPO DE PAGO',
+            'campana': 'CAMPAÑA',
+            'razon_social': 'RAZON SOCIAL',
+            'monto': 'MONTO'
+        }).assign(
+            FECHA=lambda x: x['FECHA'].dt.strftime('%d/%m/%Y'),
+            MONTO=lambda x: x['MONTO'].apply(lambda m: f"S/. {m:,.2f}")
+        ), use_container_width=True)
 
 # Título principal con icono y tamaño grande
 st.markdown(
@@ -233,15 +219,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # KPIs
-total_cuentas = len(data)
-monto_deuda = data['DEUDA TOTAL'].sum()
-monto_gastos_admin = data['GASTOS ADMIN'].sum()
-rec_planillas = data['REC. PLANILLAS'].sum()
-rec_gastos = data['REC. GASTOS'].sum()
+total_cuentas = len(df)
+monto_deuda = df['DEUDA TOTAL'].sum()
+monto_gastos_admin = df['GASTOS ADMIN'].sum()
+rec_planillas = df['REC. PLANILLAS'].sum()
+rec_gastos = df['REC. GASTOS'].sum()
 
 
 # % Barrido (clientes gestionados)
-casos_barridos = data['ULTIMA FECHA GESTION'].notna().sum()
+casos_barridos = df['ULTIMA FECHA GESTION'].notna().sum()
 porcentaje_barrido = (casos_barridos / total_cuentas * 100) if total_cuentas > 0 else 0
 
 # Tarjetas de KPIs
@@ -316,7 +302,7 @@ st.markdown("<h2>📋 Tabla Resumen por Campaña</h2>", unsafe_allow_html=True)
 
 
 # Agrupar por campaña y calcular los valores, incluyendo gestionados
-tabla_campana = data.groupby('CAMPAÑA').agg(
+tabla_campana = df.groupby('CAMPAÑA').agg(
     TOTAL_CUENTAS=('CAMPAÑA', 'count'),
     REC_PLANILLAS=('REC. PLANILLAS', 'sum'),
     REC_GASTOS=('REC. GASTOS', 'sum'),
@@ -337,6 +323,13 @@ tabla_campana['% GASTOS ADMIN'] = np.where(
     0
 )
 
+# Añadir la columna % BARRIDO
+tabla_campana['% BARRIDO'] = np.where(
+    tabla_campana['TOTAL_CUENTAS'] > 0,
+    tabla_campana['GESTIONADOS'] / tabla_campana['TOTAL_CUENTAS'] * 100,
+    0
+)
+
 # Formatear montos
 tabla_campana['REC_PLANILLAS'] = tabla_campana['REC_PLANILLAS'].apply(lambda x: f"S/. {x:,.2f}")
 tabla_campana['REC_GASTOS'] = tabla_campana['REC_GASTOS'].apply(lambda x: f"S/. {x:,.2f}")
@@ -344,6 +337,7 @@ tabla_campana['DEUDA_TOTAL'] = tabla_campana['DEUDA_TOTAL'].apply(lambda x: f"S/
 tabla_campana['GASTOS_ADMIN'] = tabla_campana['GASTOS_ADMIN'].apply(lambda x: f"S/. {x:,.2f}")
 tabla_campana['% PLANILLAS'] = tabla_campana['% PLANILLAS'].apply(lambda x: f"{float(x.replace('%','')):.2f}%" if isinstance(x, str) else f"{x:.2f}%")
 tabla_campana['% GASTOS ADMIN'] = tabla_campana['% GASTOS ADMIN'].apply(lambda x: f"{float(x.replace('%','')):.2f}%" if isinstance(x, str) else f"{x:.2f}%")
+tabla_campana['% BARRIDO'] = tabla_campana['% BARRIDO'].apply(lambda x: f"{x:.2f}%")
 
 
 # Calcular totales para cada columna relevante
@@ -356,8 +350,9 @@ totales = {
     'GASTOS ADMIN': f"S/. {df['GASTOS ADMIN'].sum():,.2f}",
     'GESTIONADOS': tabla_campana['GESTIONADOS'].sum(),
     '% PLANILLAS': f"{(df['REC. PLANILLAS'].sum()/df['DEUDA TOTAL'].sum()*100 if df['DEUDA TOTAL'].sum()>0 else 0):.2f}%",
-    '% GASTOS ADMIN': f"{(df['REC. GASTOS'].sum()/df['GASTOS ADMIN'].sum()*100 if df['GASTOS ADMIN'].sum()>0 else 0):.2f}%"
-}
+    '% GASTOS ADMIN': f"{(df['REC. GASTOS'].sum()/df['GASTOS ADMIN'].sum()*100 if df['GASTOS ADMIN'].sum()>0 else 0):.2f}%",
+    '% BARRIDO': f"{(tabla_campana['GESTIONADOS'].sum()/tabla_campana['TOTAL_CUENTAS'].sum()*100 if tabla_campana['TOTAL_CUENTAS'].sum()>0 else 0):.2f}%"
+};
 
 # Renombrar todas las columnas con '_' por ' '
 tabla_campana = tabla_campana.rename(columns=lambda x: x.replace('_', ' '))
@@ -366,6 +361,7 @@ column_order = [
     'CAMPAÑA',
     'TOTAL CUENTAS',
     'GESTIONADOS',
+    '% BARRIDO',
     'DEUDA TOTAL',
     'REC PLANILLAS',
     'GASTOS ADMIN',
@@ -421,12 +417,36 @@ st.markdown("""
     border-radius: 12px 12px 0 0;
     border: none;
 }
+.tabla-dashboard th:nth-child(1) {
+    min-width: 80px; /* Compactar CAMPAÑA */
+    max-width: 100px;
+}
 .tabla-dashboard th:nth-child(2) {
-    min-width: 120px;
-    max-width: 120px;
+    min-width: 80px; /* Compactar TOTAL CUENTAS */
+    max-width: 100px;
+}
+.tabla-dashboard th:nth-child(3) {
+    min-width: 80px; /* Compactar GESTIONADOS */
+    max-width: 100px;
 }
 .tabla-dashboard th:nth-child(4) {
-    min-width: 180px;
+    min-width: 80px; /* Compactar % BARRIDO */
+    max-width: 100px;
+}
+.tabla-dashboard th:nth-child(6) {
+    min-width: 150px; /* Reducir el ancho mínimo para REC PLANILLAS */
+    max-width: 180px;
+}
+.tabla-dashboard th:nth-child(7) {
+    min-width: 150px; /* Reducir el ancho mínimo para GASTOS ADMIN */
+    max-width: 180px;
+}
+.tabla-dashboard th:nth-child(10) {
+    min-width: 120px; /* Reducir el ancho mínimo para % GASTOS ADMIN */
+    max-width: 140px;
+}
+.tabla-dashboard th:nth-child(5) {
+    min-width: 200px; /* Reducir el ancho mínimo para DEUDA TOTAL */
     max-width: 220px;
 }
 .tabla-dashboard td {
@@ -458,6 +478,20 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Ajustar encabezados para reflejar el nuevo orden de columnas
+headers = [
+    ("<span style='font-size:1.2em;'>🎯</span> CAMPAÑA"),
+    ("<span style='font-size:1.2em;'>💳</span> TOTAL CUENTAS"),
+    ("GESTIONADOS"),
+    ("<span style='font-size:1.2em;'>🧹</span> % BARRIDO"),
+    ("<span style='font-size:1.2em;'>💰</span> DEUDA TOTAL"),
+    ("<span style='font-size:1.2em;'>🏦</span> REC PLANILLAS"),
+    ("<span style='font-size:1.2em;'>🏦</span> GASTOS ADMIN"),
+    ("<span style='font-size:1.2em;'>🏧</span> REC GASTOS"),
+    ("<span style='font-size:1.2em;'>📊</span> % PLANILLAS"),
+    ("<span style='font-size:1.2em;'>📈</span> % GASTOS ADMIN")
+]
+
 # Construir tabla HTML
 def percent_class(val):
         try:
@@ -471,18 +505,6 @@ def percent_class(val):
         except:
                 return ''
 
-headers = [
-        ("<span style='font-size:1.2em;'>🎯</span> CAMPAÑA"),
-        ("<span style='font-size:1.2em;'>💳</span> TOTAL CUENTAS"),
-        ("GESTIONADOS"),
-        ("<span style='font-size:1.2em;'>💰</span> DEUDA TOTAL"),
-        ("<span style='font-size:1.2em;'>🏦</span> REC PLANILLAS"),
-        ("<span style='font-size:1.2em;'>🏦</span> GASTOS ADMIN"),
-        ("<span style='font-size:1.2em;'>🏧</span> REC GASTOS"),
-        ("<span style='font-size:1.2em;'>📊</span> % PLANILLAS"),
-        ("<span style='font-size:1.2em;'>📈</span> % GASTOS ADMIN")
-]
-
 tabla_html = "<table class='tabla-dashboard'>"
 tabla_html += "<tr>" + "".join([f"<th>{h}</th>" for h in headers]) + "</tr>"
 
@@ -492,7 +514,7 @@ for i, row in tabla_campana_totales.iterrows():
         for col in tabla_campana_totales.columns:
                 val = row[col]
                 cell_class = "total" if is_total else ""
-                if col in ['% PLANILLAS', '% GASTOS ADMIN']:
+                if col in ['% PLANILLAS', '% GASTOS ADMIN', '% BARRIDO']:
                         cell_class += " " + percent_class(val)
                 tabla_html += f"<td class='{cell_class.strip()}'>{val}</td>"
         tabla_html += "</tr>"
@@ -582,9 +604,9 @@ plt.tight_layout()
 
 col1, col2 = st.columns(2)
 with col1:
-    st.pyplot(fig1, width='stretch')
+    st.pyplot(fig1, use_container_width=True)
 with col2:
-    st.pyplot(fig2, width='stretch')
+    st.pyplot(fig2, use_container_width=True)
 # ================= FIN GRAFICOS DE PASTEL POR CAMPAÑA =================
 # ================= GRAFICOS DE BARRAS HORIZONTALES POR ASESOR =================
 # Este bloque muestra dos gráficos de barras horizontales, uno para REC. PLANILLAS y otro para REC. GASTOS por asesor.
@@ -599,8 +621,8 @@ st.markdown("""
 # Agrupar datos por asesor
 
 # Extraer solo el primer nombre del asesor
-data['ASESOR_PRIMER_NOMBRE'] = data['ASESOR'].astype(str).apply(lambda x: x.split()[0] if isinstance(x, str) and len(x.split()) > 0 else x)
-tabla_asesor = data.groupby('ASESOR_PRIMER_NOMBRE').agg(
+df['ASESOR_PRIMER_NOMBRE'] = df['ASESOR'].astype(str).apply(lambda x: x.split()[0] if isinstance(x, str) and len(x.split()) > 0 else x)
+tabla_asesor = df.groupby('ASESOR_PRIMER_NOMBRE').agg(
     REC_PLANILLAS=('REC. PLANILLAS', 'sum'),
     REC_GASTOS=('REC. GASTOS', 'sum')
 ).reset_index()
@@ -646,9 +668,9 @@ plt.tight_layout()
 # Mostrar los gráficos uno al costado del otro
 col_bar1, col_bar2 = st.columns(2)
 with col_bar1:
-    st.pyplot(fig_bar_planillas, width='stretch')
+    st.pyplot(fig_bar_planillas, use_container_width=True)
 with col_bar2:
-    st.pyplot(fig_bar_gastos, width='stretch')
+    st.pyplot(fig_bar_gastos, use_container_width=True)
 # ================= FIN GRAFICOS DE BARRAS HORIZONTALES POR ASESOR =================
 # ================= TABLA RESUMEN POR ASESOR =================
 st.markdown("---")
@@ -659,7 +681,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-tabla_resumen_asesor = data.groupby('ASESOR').agg(
+tabla_resumen_asesor = df.groupby('ASESOR').agg(
     QdeCuentas=('ASESOR', 'count'),
     Gestionados=('ULTIMA FECHA GESTION', lambda x: x.notna().sum()),
     DeudaTotal=('DEUDA TOTAL', 'sum'),
@@ -704,18 +726,18 @@ st.markdown("""
 
 col_filtros1, col_filtros2 = st.columns([2,2])
 with col_filtros1:
-    campanias = data['CAMPAÑA'].unique().tolist()
+    campanias = df['CAMPAÑA'].unique().tolist()
     opciones = ['TOTAL'] + campanias
     campania_seleccionada = st.radio('Filtrar por campaña:', opciones, horizontal=True)
 with col_filtros2:
-    asesores = ['TODOS'] + sorted(data['ASESOR'].dropna().unique().tolist())
+    asesores = ['TODOS'] + sorted(df['ASESOR'].dropna().unique().tolist())
     asesor_seleccionado = st.selectbox('Filtrar por asesor:', asesores)
 
 # Aplicar ambos filtros
 if campania_seleccionada == 'TOTAL':
-    df_filtrado = data.copy()
+    df_filtrado = df.copy()
 else:
-    df_filtrado = data[data['CAMPAÑA'] == campania_seleccionada]
+    df_filtrado = df[df['CAMPAÑA'] == campania_seleccionada]
 if asesor_seleccionado != 'TODOS':
     df_filtrado = df_filtrado[df_filtrado['ASESOR'] == asesor_seleccionado]
 
@@ -815,7 +837,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Clasificación de casos
-df_analisis = data.copy()
+df_analisis = df.copy()
 df_analisis['NIVEL_RIESGO'] = 'BAJO'
 # CRÍTICO: PRIORIDAD contiene "12" + CONTACTABILIDAD = "Contacto Directo" + TIPO DE PAGO = "FALTA PAGO DE PAGO PLANILLAS"
 # CRÍTICO: PRIORIDAD contiene "12" + CONTACTABILIDAD = "Contacto Directo" + TIPO DE PAGO = "FALTA PAGO DE PAGO PLANILLAS"
@@ -872,7 +894,29 @@ color_card = {
 # Visualización horizontal
 st.markdown("""
 <style>
-.nivel-row { display: flex; flex-direction: row; gap: 32px; justify-content: center; }
+.nivel-row {
+    display: flex;
+    flex-direction: row;
+    gap: 32px;
+    justify-content: center;
+}
+.nivel-card {
+    flex: 1;
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    text-align: center;
+}
+.nivel-card h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+.nivel-card p {
+    margin: 8px 0;
+    font-size: 1rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -997,28 +1041,29 @@ tabla_html += """
 st.markdown(tabla_html, unsafe_allow_html=True)
 # === HISTORIAL DE PAGOS (ACTUALIZADO) ===
 # Crear df_pagos desde el DataFrame principal, seleccionando columnas que pueden existir
-cols = ['campana', 'tipo_pago', 'fecha', 'monto', 'documento', 'RAZON SOCIAL']
-
-existing = [c for c in cols if c in data.columns]
+cols = ['campana', 'tipo_pago', 'fecha', 'monto', 'documento', 'razon_social']
+existing = [c for c in cols if c in df.columns]
 df_pagos = pd.DataFrame()
 
 # Procesar datos de pagos de planillas y gastos
-if not data.empty:
+if not df.empty:
     # Procesar pagos de planillas
-    if 'FECHA DE PAGO P' in data.columns and 'REC. PLANILLAS' in data.columns:
-        df_planillas = data[['FECHA DE PAGO P', 'REC. PLANILLAS', 'CAMPAÑA']].rename(columns={
+    if 'FECHA DE PAGO P' in df.columns and 'REC. PLANILLAS' in df.columns:
+        df_planillas = df[['FECHA DE PAGO P', 'REC. PLANILLAS', 'CAMPAÑA', 'RAZON SOCIAL']].rename(columns={
             'FECHA DE PAGO P': 'fecha',
             'REC. PLANILLAS': 'monto',
-            'CAMPAÑA': 'campana'
+            'CAMPAÑA': 'campana',
+            'RAZON SOCIAL': 'razon_social'
         })
         df_planillas['tipo_pago'] = 'PLANILLAS'
 
     # Procesar pagos de gastos
-    if 'FECHA DE PAGO G' in data.columns and 'REC. GASTOS' in data.columns:
-        df_gastos = data[['FECHA DE PAGO G', 'REC. GASTOS', 'CAMPAÑA']].rename(columns={
+    if 'FECHA DE PAGO G' in df.columns and 'REC. GASTOS' in df.columns:
+        df_gastos = df[['FECHA DE PAGO G', 'REC. GASTOS', 'CAMPAÑA', 'RAZON SOCIAL']].rename(columns={
             'FECHA DE PAGO G': 'fecha',
             'REC. GASTOS': 'monto',
-            'CAMPAÑA': 'campana'
+            'CAMPAÑA': 'campana',
+            'RAZON SOCIAL': 'razon_social'
         })
         df_gastos['tipo_pago'] = 'GASTOS'
 
@@ -1032,13 +1077,10 @@ if not data.empty:
 
 # Asegurarse de que las columnas estén correctamente formateadas
 if not df_pagos.empty:
+    df_pagos['razon_social'] = df_pagos['razon_social'].fillna('Desconocido').astype(str).str.strip()
     df_pagos['fecha'] = pd.to_datetime(df_pagos['fecha'], errors='coerce')
     df_pagos['monto'] = pd.to_numeric(df_pagos['monto'], errors='coerce')
     df_pagos['campana'] = df_pagos['campana'].astype(str).fillna('Sin campaña')
-
-    if 'RAZON SOCIAL' not in df_pagos.columns:
-        df_pagos['RAZON SOCIAL'] = ''
-    df_pagos['RAZON SOCIAL'] = df_pagos['RAZON SOCIAL'].fillna('Desconocido').astype(str).str.strip()
 
 # Verificar si df_pagos contiene datos válidos
 if df_pagos.empty:
@@ -1047,21 +1089,3 @@ else:
     # Llamar a la función render_historial_pagos
     render_historial_pagos(df_pagos)
 # === FIN HISTORIAL DE PAGOS ===
-
-# Actualizar la tabla de Detalle de Pagos Recientes para incluir la columna RAZON SOCIAL
-st.markdown("<h2>📄 Detalle de Pagos Recientes</h2>", unsafe_allow_html=True)
-
-# Filtrar columnas relevantes para la tabla
-columnas_detalle = ['fecha', 'monto', 'campana', 'tipo_pago', 'RAZON SOCIAL']
-try:
-    detalle_pagos_recientes = data[columnas_detalle]
-    # Mostrar la tabla con Streamlit
-    st.dataframe(
-        detalle_pagos_recientes.style.set_table_styles(
-            [{'selector': 'th', 'props': [('text-align', 'center')]}]
-        ).set_properties(**{'text-align': 'center'}),
-        width='stretch',
-        hide_index=True
-    )
-except KeyError as e:
-    st.error(f"Error: Las columnas especificadas no existen en el DataFrame. Detalles: {e}")
