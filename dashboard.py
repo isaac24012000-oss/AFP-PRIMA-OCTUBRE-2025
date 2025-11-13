@@ -12,9 +12,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-
-# Ruta del archivo Excel (usar ruta relativa para Streamlit Cloud)
-EXCEL_PATH = "DATA TOTAL WORLDTEL 2025.xlsx"  # Ruta relativa para Streamlit Cloud
+EXCEL_PATH = os.path.join(os.getcwd(), "DATA TOTAL WORLDTEL 2025.xlsx")  # Confirmar ruta relativa
 
 # Verificar si el archivo Excel existe y se puede cargar
 if not os.path.exists(EXCEL_PATH):
